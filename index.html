@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Video & Image Chat Rooms</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #1f2937; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 font-sans h-screen flex flex-col">
+
+    <!-- App Header -->
+    <header class="bg-gray-800 border-b border-gray-700 p-4 flex justify-between items-center shadow-lg">
+        <div class="flex items-center space-x-3">
+            <div class="bg-indigo-600 p-2 rounded-lg text-white font-bold text-xl">💬</div>
+            <h1 class="text-xl font-bold tracking-wide">XChat <span class="text-xs bg-indigo-500/20 text-indigo-400 px-2 py-0.5 rounded ml-2">Private & Media Enabled</span></h1>
+        </div>
+        <div id="userInfo" class="hidden flex items-center space-x-3">
+            <span id="displayUsername" class="text-sm font-medium text-gray-300"></span>
+            <button onclick="logout()" class="text-xs bg-gray-700 hover:bg-red-600/30 hover:text-red-400 px-3 py-1.5 rounded transition">Disconnect</button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 flex overflow-hidden">
+        
+        <!-- Setup Screen (Auth & Room Creation) -->
+        <div id="setupScreen" class="m-auto w-full max-w-md p-6 bg-gray-800 rounded-xl border border-gray-700 shadow-2xl space-y-6">
+            <!-- Step 1: Identity -->
+            <div id="identitySection" class="space-y-4">
+                <h2 class="text-lg font-semibold text-indigo-400">Set Your Identity</h2>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Username</label>
+                    <input type="text" id="usernameInput" placeholder="Enter nickname..." class="w-full bg-gray-900 border border-gray-700 rounded p-2.5 text-sm focus:outline-none focus:border-indigo-500">
+                </div>
+                <button onclick="saveIdentity()" class="w-full bg-indigo-600 hover:bg-indigo-500 font-medium py-2 rounded text-sm transition">Continue</button>
+            </div>
+
+            <!-- Step 2: Rooms Hub (Hidden initially) -->
+            <div id="roomsHubSection" class="hidden space-y-6">
+                <!-- Create Room -->
+                <div class="space-y-3 pb-4 border-b border-gray-700">
+                    <h2 class="text-md font-semibold text-emerald-400">Create a New Room</h2>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="text" id="newRoomName" placeholder="Room Name" class="bg-gray-900 border border-gray-700 rounded p-2 text-xs focus:outline-none">
+                        <input type="password" id="newRoomPassword" placeholder="Password (Optional)" class="bg-gray-900 border border-gray-700 rounded p-2 text-xs focus:outline-none">
+                    </div>
+                    <button onclick="createRoom()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold py-2 rounded transition">Create Room</button>
+                </div>
+
+                <!-- Available Rooms List -->
+                <div class="space-y-2">
+                    <h2 class="text-md font-semibold text-indigo-400 flex justify-between items-center">
+                        <span>Active Rooms</span>
+                        <span class="text-xs text-gray-500" id="roomCount">0 available</span>
+                    </h2>
+                    <div id="roomsContainer" class="max-h-48 overflow-y-auto space-y-2 custom-scrollbar pr-1">
+                        <!-- Dynamic Rooms Go Here -->
+                        <div class="text-xs text-gray-500 text-center py-4">No rooms created yet. Be the first!</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Room Screen (Hidden initially) -->
+        <div id="chatScreen" class="hidden flex-1 flex overflow-hidden">
+            <!-- Sidebar: Room Info & Settings -->
+            <div class="w-64 bg-gray-800/50 border-r border-gray-700 p-4 flex flex-col justify-between hidden md:flex">
+                <div>
+                    <div class="mb-6">
+                        <span class="text-xs text-gray-500 block uppercase font-bold tracking-wider">Current Room</span>
+                        <h2 id="currentRoomTitle" class="text-lg font-bold text-white truncate">--</h2>
+                        <span id="roomTypeBadge" class="inline-block mt-1 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded"></span>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <span class="text-xs text-gray-500 block uppercase font-bold tracking-wider mb-2">Host Privileges</span>
+                            <div id="hostControls" class="bg-gray-900/60 p-3 rounded border border-gray-700/50 text-xs text-gray-400 space-y-2">
+                                <p id="hostStatusText">Checking access...</p>
+                                <div id="hostActions" class="hidden pt-1">
+                                    <span class="text-[10px] text-emerald-400 block mb-1">✓ You are the Room Creator</span>
+                                    <p class="text-[11px] text-gray-400">You can upload images, videos, and manage the room configuration details.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="text-xs text-gray-600">
+                    Room Protocol: WebSocket-Ready Emulation
+                </div>
+            </div>
+
+            <!-- Main Chat Workspace -->
+            <div class="flex-1 flex flex-col bg-gray-900">
+                <!-- Chat Stream -->
+                <div id="messageStream" class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                    <!-- Dynamic Messages -->
+                </div>
+
+                <!-- Input Interface Panel -->
+                <div class="p-4 bg-gray-800/40 border-t border-gray-700/60">
+                    <!-- Media Upload Preview / Action bar for Creator -->
+                    <div id="creatorUploadBar" class="hidden bg-gray-900 border border-gray-700/80 rounded-t-lg p-2 flex items-center justify-between text-xs transition-all">
+                        <div class="flex items-center space-x-2">
+                            <span class="text-emerald-400 font-semibold">Creator Studio:</span>
+                            <span class="text-gray-400">Share multimedia contents directly with the room participants.</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <!-- Image Input -->
+                            <label class="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-200 px-2.5 py-1 rounded cursor-pointer font-medium transition flex items-center space-x-1">
+                                <span>🖼️ Image</span>
+                                <input type="file" id="imageFileInput" accept="image/*" class="hidden" onchange="handleMediaUpload(this, 'image')">
+                            </label>
+                            <!-- Video Input -->
+                            <label class="bg-gray-800 hover:bg-gray-700 border border-gray-600 text-gray-200 px-2.5 py-1 rounded cursor-pointer font-medium transition flex items-center space-x-1">
+                                <span>🎥 Video</span>
+                                <input type="file" id="videoFileInput" accept="video/*" class="hidden" onchange="handleMediaUpload(this, 'video')">
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Main Text Message Input Field -->
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="messageInputField" placeholder="Type your message here..." class="flex-1 bg-gray-900 border border-gray-700 rounded-lg p-3 text-sm focus:outline-none focus:border-indigo-500" onkeydown="if(event.key === 'Enter') sendTextMessage()">
+                        <button onclick="sendTextMessage()" class="bg-indigo-600 hover:bg-indigo-500 px-5 py-3 rounded-lg font-semibold text-sm transition">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Room Password Prompt Modal -->
+    <div id="passwordModal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+        <div class="bg-gray-800 border border-gray-700 rounded-xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+            <h3 class="text-md font-bold text-amber-400">🔒 Room Requires Password</h3>
+            <p class="text-xs text-gray-400">This room is private. Please enter the authentic password passphrase to request entry.</p>
+            <input type="password" id="modalPasswordInput" placeholder="Password Key" class="w-full bg-gray-900 border border-gray-700 rounded p-2 text-sm focus:outline-none">
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="closePasswordModal()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs transition">Cancel</button>
+                <button id="modalSubmitBtn" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded text-xs font-semibold transition">Join Room</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Core App Logic (Simulation Architecture) -->
+    <script>
+        // Application State
+        let currentUser = "";
+        let currentRoom = null;
+        
+        // Emulated database storage structure
+        let rooms = JSON.parse(localStorage.getItem('chat_rooms')) || {};
+
+        // Lifecycle initialization
+        window.onload = function() {
+            const savedUser = sessionStorage.getItem('chat_user');
+            if (savedUser) {
+                currentUser = savedUser;
+                showRoomsHub();
+            }
+            renderRoomsList();
+        };
+
+        function saveIdentity() {
+            const val = document.getElementById('usernameInput').value.trim();
+            if(!val) return alert("Please enter a valid username!");
+            currentUser = val;
+            sessionStorage.setItem('chat_user', currentUser);
+            showRoomsHub();
+        }
+
+        function showRoomsHub() {
+            document.getElementById('identitySection').classList.add('hidden');
+            document.getElementById('roomsHubSection').classList.remove('hidden');
+            document.getElementById('userInfo').classList.remove('hidden');
+            document.getElementById('displayUsername').innerText = currentUser;
+        }
+
+        function renderRoomsList() {
+            const container = document.getElementById('roomsContainer');
+            const counter = document.getElementById('roomCount');
+            const keys = Object.keys(rooms);
+            
+            counter.innerText = `${keys.length} active room${keys.length === 1 ? '' : 's'}`;
+            
+            if(keys.length === 0) {
+                container.innerHTML = `<div class="text-xs text-gray-500 text-center py-4">No rooms created yet. Be the first!</div>`;
+                return;
+            }
+
+            container.innerHTML = keys.map(id => {
+                const r = rooms[id];
+                return `
+                    <div class="bg-gray-900 border border-gray-700 hover:border-gray-600 rounded p-3 flex items-center justify-between transition group">
+                        <div class="truncate pr-2">
+                            <div class="flex items-center space-x-1">
+                                <span class="text-sm font-semibold text-gray-200 truncate">${r.name}</span>
+                                <span>${r.password ? '🔒' : '🔓'}</span>
+                            </div>
+                            <span class="text-[10px] text-gray-500 block truncate">Host: ${r.creator}</span>
+                        </div>
+                        <button onclick="tryJoinRoom('${id}')" class="bg-indigo-600 group-hover:bg-indigo-500 text-xs px-3 py-1.5 rounded font-medium transition shrink-0">Join</button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function createRoom() {
+            const name = document.getElementById('newRoomName').value.trim();
+            const password = document.getElementById('newRoomPassword').value;
+            
+            if(!name) return alert("Room configuration needs a valid name!");
+
+            const roomId = 'room_' + Date.now();
+            rooms[roomId] = {
+                id: roomId,
+                name: name,
+                password: password || null,
+                creator: currentUser,
+                messages: [
+                    { sender: "System", type: "system", content: `Room "${name}" successfully deployed by ${currentUser}. Media features activated.` }
+                ]
+            };
+
+            localStorage.setItem('chat_rooms', JSON.stringify(rooms));
+            renderRoomsList();
+            
+            // Clear inputs
+            document.getElementById('newRoomName').value = "";
+            document.getElementById('newRoomPassword').value = "";
+            
+            // Auto enter room
+            enterRoom(roomId);
+        }
+
+        function tryJoinRoom(id) {
+            const r = rooms[id];
+            if(!r) return;
+
+            if(r.password) {
+                document.getElementById('passwordModal').classList.remove('hidden');
+                document.getElementById('modalPasswordInput').value = "";
+                document.getElementById('modalPasswordInput').focus();
+                
+                document.getElementById('modalSubmitBtn').onclick = function() {
+                    const passInput = document.getElementById('modalPasswordInput').value;
+                    if(passInput === r.password) {
+                        closePasswordModal();
+                        enterRoom(id);
+                    } else {
+                        alert("Invalid security password passphrase!");
+                    }
+                };
+            } else {
+                enterRoom(id);
+            }
+        }
+
+        function closePasswordModal() {
+            document.getElementById('passwordModal').classList.add('hidden');
+        }
+
+        function enterRoom(id) {
+            currentRoom = rooms[id];
+            if(!currentRoom) return;
+
+            document.getElementById('setupScreen').classList.add('hidden');
+            document.getElementById('chatScreen').classList.remove('hidden');
+            
+            // Set Header Metadata
+            document.getElementById('currentRoomTitle').innerText = currentRoom.name;
+            const badge = document.getElementById('roomTypeBadge');
+            if(currentRoom.password) {
+                badge.className = "inline-block mt-1 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400";
+                badge.innerText = "Private Room";
+            } else {
+                badge.className = "inline-block mt-1 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400";
+                badge.innerText = "Public Room";
+            }
+
+            // Check Creator / Host Privileges
+            const isCreator = (currentRoom.creator === currentUser);
+            const statusText = document.getElementById('hostStatusText');
+            const hostActions = document.getElementById('hostActions');
+            const creatorUploadBar = document.getElementById('creatorUploadBar');
+
+            if(isCreator) {
+                statusText.classList.add('hidden');
+                hostActions.classList.remove('hidden');
+                creatorUploadBar.classList.remove('hidden');
+            } else {
+                statusText.classList.remove('hidden');
+                statusText.innerHTML = `Connected as participant.<br><span class="text-[11px] text-amber-500/80">⚠️ Media posting is exclusively reserved for host: <b>${currentRoom.creator}</b></span>`;
+                hostActions.classList.add('hidden');
+                creatorUploadBar.classList.add('hidden');
+            }
+
+            renderMessages();
+        }
+
+        function renderMessages() {
+            const stream = document.getElementById('messageStream');
+            if(!currentRoom) return;
+
+            stream.innerHTML = currentRoom.messages.map(m => {
+                if(m.type === 'system') {
+                    return `<div class="text-center text-xs font-medium text-gray-500 my-2 bg-gray-800/30 py-1 rounded">${m.content}</div>`;
+                }
+
+                const isMe = m.sender === currentUser;
+                return `
+                    <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'}">
+                        <div class="max-w-md bg-gray-800 border border-gray-700/60 rounded-xl px-4 py-2.5 shadow-sm space-y-1">
+                            <span class="text-[11px] font-bold block ${isMe ? 'text-indigo-400' : 'text-emerald-400'}">${m.sender}</span>
+                            <div class="text-sm text-gray-100 break-words">
+                                ${renderMessageContent(m)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Auto scroll to latest messages
+            stream.scrollTop = stream.scrollHeight;
+        }
+
+        function renderMessageContent(msg) {
+            if(msg.type === 'image') {
+                return `<img src="${msg.content}" alt="Shared Image File" class="max-w-full rounded max-h-60 border border-gray-700 mt-1 cursor-pointer hover:opacity-90 transition" onclick="window.open(this.src)">`;
+            }
+            if(msg.type === 'video') {
+                return `<video src="${msg.content}" controls class="max-w-full rounded max-h-60 border border-gray-700 mt-1"></video>`;
+            }
+            return msg.content;
+        }
+
+        function sendTextMessage() {
+            const input = document.getElementById('messageInputField');
+            const text = input.value.trim();
+            if(!text || !currentRoom) return;
+
+            pushMessage({
+                sender: currentUser,
+                type: 'text',
+                content: text
+            });
+            input.value = "";
+        }
+
+        function handleMediaUpload(inputElement, type) {
+            const file = inputElement.files[0];
+            if(!file || !currentRoom) return;
+
+            // Ensure only the room creator is passing files downstream
+            if(currentRoom.creator !== currentUser) {
+                alert("Security Error: Only the designated room creator holds upload permissions.");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                pushMessage({
+                    sender: currentUser,
+                    type: type,
+                    content: e.target.result // Base64 encoding stream simulation
+                });
+            };
+            reader.readAsDataURL(file);
+            inputElement.value = ""; // Clear file selector string
+        }
+
+        function pushMessage(msgObj) {
+            currentRoom.messages.push(msgObj);
+            
+            // Sync database persistence
+            rooms[currentRoom.id] = currentRoom;
+            localStorage.setItem('chat_rooms', JSON.stringify(rooms));
+            
+            renderMessages();
+        }
+
+        function logout() {
+            sessionStorage.removeItem('chat_user');
+            window.location.reload();
+        }
+    </script>
+</body>
+</html>

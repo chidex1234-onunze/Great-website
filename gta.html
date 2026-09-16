@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Web Chatroom</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background-color: #f0f2f5;
+            display: flex;
+            height: 100vh;
+        }
+        #sidebar {
+            width: 260px;
+            background-color: #2c3e50;
+            color: #ecf0f1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+        #sidebar h2 {
+            margin-bottom: 20px;
+            font-size: 20px;
+            text-align: center;
+            border-bottom: 1px solid #34495e;
+            padding-bottom: 10px;
+        }
+        .room-btn {
+            background: none;
+            border: none;
+            color: #bdc3c7;
+            padding: 12px;
+            text-align: left;
+            width: 100%;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-bottom: 8px;
+            transition: 0.3s;
+        }
+        .room-btn:hover, .room-btn.active {
+            background-color: #34495e;
+            color: #fff;
+        }
+        #create-room-btn {
+            margin-top: auto;
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        #create-room-btn:hover {
+            background-color: #219653;
+        }
+        #chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #fff;
+        }
+        #chat-header {
+            padding: 20px;
+            background-color: #fff;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        #messages-container {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .message {
+            max-width: 70%;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 15px;
+            line-height: 1.4;
+            position: relative;
+        }
+        .message.sent {
+            background-color: #d9fdd3;
+            align-self: flex-end;
+            color: #303030;
+        }
+        .message.received {
+            background-color: #fff;
+            align-self: flex-start;
+            border: 1px solid #e0e0e0;
+            color: #303030;
+        }
+        .message .meta {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 4px;
+            display: block;
+        }
+        #input-area {
+            padding: 15px;
+            background-color: #fff;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+        }
+        #message-input {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            outline: none;
+            font-size: 15px;
+        }
+        #send-btn {
+            background-color: #0084ff;
+            color: white;
+            border: none;
+            padding: 0 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        #send-btn:hover {
+            background-color: #006bde;
+        }
+        #username-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .modal-content h3 { margin-bottom: 15px; }
+        .modal-content input {
+            padding: 10px;
+            width: 80%;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .modal-content button {
+            background: #0084ff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="username-modal">
+        <div class="modal-content">
+            <h3>Enter Your Username</h3>
+            <input type="text" id="username-field" placeholder="e.g. Alex" maxlength="15">
+            <br>
+            <button id="save-username-btn">Join Chat</button>
+        </div>
+    </div>
+
+    <div id="sidebar">
+        <h2>Chat Rooms</h2>
+        <div id="rooms-list"></div>
+        <button id="create-room-btn">+ New Room</button>
+    </div>
+
+    <div id="chat-area">
+        <div id="chat-header">Select a room to start talking</div>
+        <div id="messages-container"></div>
+        <div id="input-area">
+            <input type="text" id="message-input" placeholder="Type a message..." disabled>
+            <button id="send-btn" disabled>Send</button>
+        </div>
+    </div>
+
+    <script>
+        let username = "Anonymous";
+        let activeRoom = null;
+
+        // Using BroadcastChannel API for multi-tab local communication without a backend server
+        const chatChannel = new BroadcastChannel('local_mesh_chat');
+
+        const roomsList = document.getElementById('rooms-list');
+        const chatHeader = document.getElementById('chat-header');
+        const messagesContainer = document.getElementById('messages-container');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const createRoomBtn = document.getElementById('create-room-btn');
+        const usernameModal = document.getElementById('username-modal');
+        const usernameField = document.getElementById('username-field');
+        const saveUsernameBtn = document.getElementById('save-username-btn');
+
+        // Initial default rooms stored in localStorage
+        let rooms = JSON.parse(localStorage.getItem('chat_rooms')) || ['General', 'Gaming', 'Tech'];
+        
+        // Structure to mock message history in localStorage
+        let messageHistory = JSON.parse(localStorage.getItem('chat_history')) || {};
+
+        function saveState() {
+            localStorage.setItem('chat_rooms', JSON.stringify(rooms));
+            localStorage.setItem('chat_history', JSON.stringify(messageHistory));
+        }
+
+        function init() {
+            roomsList.innerHTML = '';
+            rooms.forEach(room => {
+                const button = document.createElement('button');
+                button.classList.add('room-btn');
+                if(room === activeRoom) button.classList.add('active');
+                button.textContent = '# ' + room;
+                button.onclick = () => switchRoom(room);
+                roomsList.appendChild(button);
+            });
+            saveState();
+        }
+
+        saveUsernameBtn.onclick = () => {
+            const val = usernameField.value.trim();
+            if(val) {
+                username = val;
+                usernameModal.style.display = 'none';
+                switchRoom(rooms[0]); 
+            }
+        };
+
+        function switchRoom(roomName) {
+            activeRoom = roomName;
+            chatHeader.textContent = `# ${roomName}`;
+            messageInput.disabled = false;
+            sendBtn.disabled = false;
+            
+            // Highlight active button
+            document.querySelectorAll('.room-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent === `# ${roomName}`);
+            });
+
+            renderMessages();
+        }
+
+        function renderMessages() {
+            messagesContainer.innerHTML = '';
+            const history = messageHistory[activeRoom] || [];
+            history.forEach(msg => {
+                const msgDiv = document.createElement('div');
+                msgDiv.classList.add('message');
+                msgDiv.classList.add(msg.user === username ? 'sent' : 'received');
+                
+                msgDiv.innerHTML = `<span class="meta">${msg.user}</span>${escapeHTML(msg.text)}`;
+                messagesContainer.appendChild(msgDiv);
+            });
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function sendMessage() {
+            const text = messageInput.value.trim();
+            if(!text || !activeRoom) return;
+
+            const msgObj = { room: activeRoom, user: username, text: text };
+            
+            // Save to local history
+            if(!messageHistory[activeRoom]) messageHistory[activeRoom] = [];
+            messageHistory[activeRoom].push(msgObj);
+            saveState();
+
+            // Broadcast to other tabs
+            chatChannel.postMessage(msgObj);
+
+            renderMessages();
+            messageInput.value = '';
+        }
+
+        sendBtn.onclick = sendMessage;
+        messageInput.onkeypress = (e) => { if(e.key === 'Enter') sendMessage(); };
+
+        createRoomBtn.onclick = () => {
+            const newRoom = prompt("Enter new room name:");
+            if(newRoom && newRoom.trim()) {
+                const cleanedName = newRoom.trim();
+                if(!rooms.includes(cleanedName)) {
+                    rooms.push(cleanedName);
+                    // Broadcast new room creation to sync tabs
+                    chatChannel.postMessage({ type: 'NEW_ROOM', name: cleanedName });
+                    init();
+                    switchRoom(cleanedName);
+                }
+            }
+        };
+
+        // Listen for live messages/events from other local tabs
+        chatChannel.onmessage = (event) => {
+            const data = event.data;
+            if (data.type === 'NEW_ROOM') {
+                if(!rooms.includes(data.name)) {
+                    rooms.push(data.name);
+                    init();
+                }
+            } else if (data.room) {
+                if(!messageHistory[data.room]) messageHistory[data.room] = [];
+                messageHistory[data.room].push(data);
+                saveState();
+                if(data.room === activeRoom) {
+                    renderMessages();
+                }
+            }
+        };
+
+        function escapeHTML(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        }
+
+        init();
+    </script>
+</body>
+</html>

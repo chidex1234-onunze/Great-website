@@ -1,0 +1,44 @@
+*{
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+.box{
+    height: 450px;
+    width: 450px;
+    background-color: aquamarine;
+}
+.container{
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+.container .box p{
+    text-align: center;
+    line-height: 150px;
+    color: rgb(177, 66, 66);
+    font-style: bold;
+    font-size: 45px;
+    font-family: sans-serif;
+
+}
+.box-container{
+    width: 100%;
+    margin-top: 50px;
+    display: flex;
+    gap: 7px;
+    justify-content: flex-start;
+}
+.box-container .child{
+    width: 200px;
+    height: 200px;
+    background-color: red
+}
+.box-container .child p{
+     text-align: center;
+    line-height: 150px;
+    color: rgb(88, 6, 240);
+    font-style: bold;
+    font-size: 15px;
+    font-family: sans-serif; 
+}

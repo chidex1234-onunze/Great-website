@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global Map Chatroom</title>
+    <!-- Leaflet CSS for World Map Mapping -->
+    <link rel="stylesheet" href="https://unpkg.com" />
+    <style>
+        body { margin: 0; font-family: system-ui, sans-serif; display: flex; height: 100vh; overflow: hidden; }
+        #map { width: 60%; height: 100%; background: #eaeaea; }
+        #sidebar { width: 40%; height: 100%; display: flex; flex-direction: column; border-left: 2px solid #ccc; background: #fff; }
+        .panel { padding: 20px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid #ddd; }
+        #chat-section { flex-grow: 1; display: none; flex-direction: column; background: #f9f9f9; }
+        #messages { flex-grow: 1; padding: 15px; overflow-y: auto; list-style: none; margin: 0; }
+        #messages li { margin-bottom: 10px; padding: 8px 12px; background: #e2e8f0; border-radius: 8px; width: fit-content; max-width: 80%; }
+        .chat-input-area { padding: 15px; display: flex; gap: 10px; background: #fff; border-top: 1px solid #ddd; }
+        input, button { padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0056b3; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <!-- Left side: Interactive Map Mapping Global Rooms -->
+    <div id="map"></div>
+
+    <!-- Right side: Control Panel & Active Chat Elements -->
+    <div id="sidebar">
+        <!-- Room Controls Interface -->
+        <div class="panel" id="controls">
+            <h3>Global Chat Network</h3>
+            <input type="text" id="username-input" placeholder="Your Username (e.g., Alice)">
+            <hr>
+            <h4>Create a Global Room</h4>
+            <small style="color: #666;">Click anywhere on the map first to set the room location coordinate!</small>
+            <input type="text" id="new-room-id" placeholder="Unique Room ID">
+            <input type="text" id="new-room-name" placeholder="Room Display Name">
+            <input type="password" id="new-room-pass" placeholder="Room Password (Creator Only)">
+            <input type="text" id="coordinates-display" placeholder="Click map to pick location" disabled>
+            <button onclick="createNewRoom()">Create Room</button>
+        </div>
+
+        <!-- Chat Output & Input Space -->
+        <div id="chat-section">
+            <div class="panel" style="background: #e9ecef;">
+                <strong id="active-room-title">Connected to Room: None</strong>
+                <button onclick="leaveChat()" style="background: #dc3545; padding: 5px 10px; font-size: 12px; align-self: flex-start;">Leave Room</button>
+            </div>
+            <ul id="messages"></ul>
+            <div class="chat-input-area">
+                <input type="text" id="msg-input" placeholder="Type a message..." style="flex-grow: 1;">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Socket.io and Leaflet Scripts -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://unpkg.com"></script>
+    <script>
+        const socket = io();
+        let currentRoomId = null;
+        let selectedLat = null;
+        let selectedLng = null;
+        let markersGroup;
+
+        // Initialize Map centered dynamically over the Atlantic
+        const map = L.map('map').setView([20, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        markersGroup = L.layerGroup().addTo(map);
+
+        // Capture global coordinates anywhere the user clicks on the map canvas
+        map.on('click', function(e) {
+            selectedLat = e.latlng.lat;
+            selectedLng = e.latlng.lng;
+            document.getElementById('coordinates-display').value = `${selectedLat.toFixed(4)}, ${selectedLng.toFixed(4)}`;
+        });
+
+        // Track and map incoming rooms from server
+        socket.on('update-room-list', (globalRooms) => {
+            markersGroup.clearLayers();
+            
+            globalRooms.forEach(room => {
+                // Add pins to map for every room created worldwide
+                const marker = L.marker([room.lat, room.lng]).addTo(markersGroup);
+                
+                // Clicking a room pin prompts user to join it
+                marker.bindPopup(`
+                    <b>Room:</b> ${room.name}<br>
+                    <button onclick="promptJoinRoom('${room.id}')" style="margin-top:5px; padding:3px 8px; font-size:12px; cursor:pointer; background:#007bff; color:#fff; border:none; border-radius:3px;">Join Room</button>
+                `);
+            });
+        });
+
+        // Fire room creation structure
+        function createNewRoom() {
+            const roomId = document.getElementById('new-room-id').value.trim();
+            const roomName = document.getElementById('new-room-name').value.trim();
+            const password = document.getElementById('new-room-pass').value;
+            const username = document.getElementById('username-input').value.trim();
+
+            if (!username) return alert('Please enter a username first.');
+            if (!roomId || !roomName) return alert('Please fill in Room ID and Room Name.');
+            if (selectedLat === null || selectedLng === null) return alert('Click a location on the map to place your room.');
+
+            socket.emit('create-room', { roomId, roomName, password, lat: selectedLat, lng: selectedLng });
+        }
+
+        // Trigger prompt sequence for entering restricted rooms
+        function promptJoinRoom(roomId) {
+            const username = document.getElementById('username-input').value.trim();
+            if (!username) return alert('Please input a username on the panel sidebar before joining.');
+
+            const passwordInput = prompt("Enter this room's secret password (Set by creator):");
+            socket.emit('join-room', { roomId, passwordInput });
+        }
+
+        // Transition UI upon verified access
+        socket.on('room-joined', ({ roomId, roomName }) => {
+            currentRoomId = roomId;
+            document.getElementById('controls').classList.add('hidden');
+            document.getElementById('chat-section').style.display = 'flex';
+            document.getElementById('active-room-title').innerText = `Connected to: ${roomName}`;
+            document.getElementById('messages').innerHTML = ''; // Reset logs
+        });
+
+        // Broadcast a standard instant chat event
+        function sendMessage() {
+            const input = document.getElementById('msg-input');
+            const username = document.getElementById('username-input').value.trim();
+            if (!input.value.trim() || !currentRoomId) return;
+
+            socket.emit('send-message', { roomId: currentRoomId, message: input.value.trim(), username });
+            input.value = '';
+        }
+
+        // Display running dialogues instantly
+        socket.on('receive-message', ({ username, text, time }) => {
+            const msgList = document.getElementById('messages');
+            const li = document.createElement('li');
+            li.innerHTML = `<strong>${username || 'Anonymous'}</strong> <small style="color:#666; font-size:10px;">${time}</small><br>${text}`;
+            msgList.appendChild(li);
+            msgList.scrollTop = msgList.scrollHeight;
+        });
+
+        socket.on('error-message', (msg) => alert(msg));
+
+        function leaveChat() {
+            window.location.reload(); // Quick reset routine to kick user back to lobby config
+        }
+    </script>
+</body>
+</html>
